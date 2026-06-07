@@ -445,7 +445,78 @@ def run_spec2nii(ds: Dataset, outdir: Path) -> tuple[Path, Path | None]:
     return nii, (sidecar if sidecar.exists() else None)
 
 
-def run_dcm2niix(ds: Dataset, outdir: Path) -> tuple[Path, Path | None]:
+def _maybe_run_mrs_post(stem_outdir: Path, source: Path, verbose: bool = False) -> None:
+    """Run dcm2niix's tools/mrs_post.py on every freshly-emitted *_svs NIfTI.
+
+    No-op if the script can't be located. mrs_post auto-detects whether any
+    applicable case (Siemens sLASER DKD multi-DICOM split / Philips MEGA-PRESS
+    reshape / _mrsref companion sanity) applies — if none does, it silently
+    leaves the bundled output alone. See `tools/mrs_post.py` in the dcm2niix
+    repo for the full case list.
+    """
+    # Locate mrs_post.py: same conventions as dcm2niix binary discovery —
+    # sibling checkout of dcm2niix expected one level up from dcm_qa_mrs.
+    here = Path(__file__).resolve().parent
+    candidates = [
+        here.parent / "dcm2niix" / "tools" / "mrs_post.py",
+        here.parent.parent / "dcm2niix" / "tools" / "mrs_post.py",
+        Path(os.environ.get("MRS_POST_PY", "")) if os.environ.get("MRS_POST_PY") else None,
+    ]
+    candidates = [c for c in candidates if c is not None]
+    mrs_post = next((c for c in candidates if c.is_file()), None)
+    if mrs_post is None:
+        if verbose:
+            print(f"  mrs_post.py not found in: {[str(c) for c in candidates]}")
+        return
+    for nii in sorted(stem_outdir.glob("*.nii")):
+        # Only run on the bundled outputs — not the post-processed ones we
+        # just wrote. Heuristic: skip files whose names already end in a
+        # mrs_post split-suffix (`_rf_off`, `_rf_grads_ovs_off`, ...) or
+        # `_mrsref`. We re-check `BidsGuess` to make sure we're operating on
+        # an MRS NIfTI in the first place.
+        sidecar = nii.with_suffix(".json")
+        if not sidecar.exists():
+            continue
+        try:
+            meta = json.loads(sidecar.read_text())
+        except (OSError, ValueError):
+            continue
+        guess = meta.get("BidsGuess")
+        if not (isinstance(guess, list) and len(guess) >= 2 and guess[0] == "mrs"):
+            continue
+        # Snapshot the pre-existing splits in this tempdir so we can detect
+        # whether mrs_post actually produced new ones. Naming convention:
+        # mrs_post emits `<stem>_svs.nii(.gz)` for the main + `<stem>_svs_<group>`
+        # for ref groups (Siemens DKD) or `<stem>_mrsref.nii(.gz)` for the
+        # Philips MEGA ref companion. Anything NOT matching that bundled-name
+        # pattern is a candidate post-output.
+        before = set(stem_outdir.glob("*.nii"))
+        try:
+            subprocess.run(
+                ["python3", str(mrs_post), str(nii), "--dicoms", str(source)],
+                check=False, capture_output=True, text=True, timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            if verbose:
+                print(f"  mrs_post timed out on {nii.name}")
+            continue
+        after = set(stem_outdir.glob("*.nii"))
+        new_files = after - before
+        if not new_files:
+            continue
+        # mrs_post produced a real split: prefer its outputs over the bundled
+        # input. Remove the bundled .nii + .json so the comparator's
+        # BidsGuess-match picks the split's main output (BidsGuess[1]=='_svs').
+        try:
+            nii.unlink()
+            json_companion = nii.with_suffix(".json")
+            if json_companion.exists():
+                json_companion.unlink()
+        except OSError:
+            pass
+
+
+def run_dcm2niix(ds: Dataset, outdir: Path, with_mrs_post: bool = False) -> tuple[Path, Path | None]:
     """Run dcm2niix on a dataset; return (nifti_path, json_sidecar_path)."""
     stem = "dcm2niix"
     # dcm2niix -b y emits sidecar, -z n keeps .nii (uncompressed for byte-level
@@ -459,6 +530,8 @@ def run_dcm2niix(ds: Dataset, outdir: Path) -> tuple[Path, Path | None]:
         subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"dcm2niix failed for {ds.id}: {e.stderr or e.stdout}") from e
+    if with_mrs_post:
+        _maybe_run_mrs_post(outdir, ds.source)
     niftis = sorted(outdir.glob(f"{stem}*.nii"))
     if not niftis:
         raise RuntimeError(f"dcm2niix produced no .nii in {outdir} (cmd: {' '.join(cmd)})")
@@ -498,7 +571,7 @@ class CompareResult(NamedTuple):
     json_state: str = "compared"  # audit 2026-06-07 round-3 M5: "compared" | "not-produced"
 
 
-def compare(ds: Dataset) -> CompareResult:
+def compare(ds: Dataset, with_mrs_post: bool = False) -> CompareResult:
     notes: list[str] = []
     with tempfile.TemporaryDirectory() as td_spec, tempfile.TemporaryDirectory() as td_dcm:
         td_spec_p = Path(td_spec); td_dcm_p = Path(td_dcm)
@@ -510,7 +583,7 @@ def compare(ds: Dataset) -> CompareResult:
             return CompareResult(ds, False, False, False, False, False, {}, -1,
                                  [f"spec2nii ERROR: {e}"], json_state="not-produced")
         try:
-            dcm_nii, dcm_json = run_dcm2niix(ds, td_dcm_p)
+            dcm_nii, dcm_json = run_dcm2niix(ds, td_dcm_p, with_mrs_post=with_mrs_post)
         except RuntimeError as e:
             return CompareResult(ds, False, False, False, False, False, {}, -1,
                                  [f"dcm2niix ERROR: {e}"], json_state="not-produced")
@@ -698,6 +771,10 @@ def main() -> int:
     ap.add_argument("--verbose", "-v", action="store_true", help="Detail every diff (default: only FAILs)")
     ap.add_argument("--run-skipped", action="store_true",
                     help="Override skip_reason markers and run those datasets too")
+    ap.add_argument("--with-mrs-post", action="store_true",
+                    help="After dcm2niix runs, also run tools/mrs_post.py to split "
+                         "vendor-state bundled MRS outputs (Siemens sLASER DKD "
+                         "multi-DICOM, Philips MEGA-PRESS reshape, _mrsref companion).")
     ap.epilog = (
         "Path overrides (audit 2026-06-07 L2): set env SPEC2NII_DATA to point "
         "at a different spec2nii test data root, and env DCM2NIIX_BIN to use "
@@ -755,7 +832,7 @@ def main() -> int:
             n_skip += 1
             continue
         try:
-            res = compare(ds)
+            res = compare(ds, with_mrs_post=args.with_mrs_post)
         except Exception as e:
             print(f"[FAIL] {ds.id:60s} exception: {e}")
             n_fail += 1
