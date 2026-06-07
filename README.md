@@ -24,6 +24,11 @@ Out/                  untracked; created/cleaned by batch.py / compare_spec2nii.
 spec2nii/             untracked; populated on demand by compare_spec2nii.py
 batch.py              sidecar regression test (per-corpus)
 compare_spec2nii.py   live validation test (FID/sform/dim/pixdim vs spec2nii)
+spec2nii_compare.py   curated 40-dataset inventory + standalone comparator
+                      (moved here from dcm2niix/tools/ once the MRS port
+                      stabilised; canonical source of the BIDS-MRS alias
+                      map / ignore lists / NIfTI parser used by batch.py
+                      and compare_spec2nii.py)
 dcm_qa_mrs_lib.py     shared helpers (series discovery, dcm2niix runner)
 spec2graph.py         single-voxel spectrum visualisation
 ```
@@ -65,10 +70,10 @@ dcm_qa_mrs has two scripts that cover different (overlapping) corpora:
 | Script | `--corpus` | Tests | Validates against |
 |---|---|---|---|
 | `batch.py` | `local` (default) | DICOMs in `In/` (XA60) | `Ref/local/` sidecars (regression of dcm2niix's own emission) |
-| `batch.py` | `spec2nii` | Wider 40-dataset reference (via `$SPEC2NII_DATA` + `$DCM2NIIX_TOOLS`) | `Ref/spec2nii/` sidecars |
+| `batch.py` | `spec2nii` | Wider 40-dataset reference (via `$SPEC2NII_DATA`) | `Ref/spec2nii/` sidecars |
 | `batch.py` | `both` | Both | Both |
 | `compare_spec2nii.py` | `local` (default) | DICOMs in `In/` | spec2nii run live (FID + sform + dim/pixdim + sidecar) |
-| `compare_spec2nii.py` | `spec2nii` | Wider corpus | spec2nii run live (delegates to `dcm2niix/tools/spec2nii_compare.py`) |
+| `compare_spec2nii.py` | `spec2nii` | Wider corpus | spec2nii run live (delegates to sibling `spec2nii_compare.py`) |
 | `compare_spec2nii.py` | `both` | Both | Both |
 
 `batch.py` catches dcm2niix self-drift; `compare_spec2nii.py` catches
@@ -106,12 +111,11 @@ python3 compare_spec2nii.py --series 30_svs_se        # restrict to one series
 Wider spec2nii corpus (one-time setup required — see next section):
 ```bash
 export SPEC2NII_DATA=/path/to/spec2nii_test_data
-export DCM2NIIX_TOOLS=/path/to/dcm2niix/tools
 python3 compare_spec2nii.py --corpus spec2nii
 python3 compare_spec2nii.py --corpus both             # run local + spec2nii
 ```
 
-`--dcm2niix-tools <path>` is the CLI equivalent of `$DCM2NIIX_TOOLS` if you'd rather not export.
+The curated 40-dataset inventory + comparison logic lives in the sibling `spec2nii_compare.py` in this same folder — both `batch.py` and `compare_spec2nii.py` find it as a sibling, no env var needed.
 
 ### One-time setup: the spec2nii corpus
 
@@ -123,8 +127,6 @@ python3 compare_spec2nii.py --corpus both             # run local + spec2nii
 cd ~/src
 git clone https://git.fmrib.ox.ac.uk/wclarke/spec2nii_test_data.git
 export SPEC2NII_DATA=$PWD/spec2nii_test_data
-# (also point DCM2NIIX_TOOLS at your dcm2niix checkout's tools/ dir)
-export DCM2NIIX_TOOLS=~/src/dcm2niix/tools
 ```
 
 This is ~5 GB and only needs to be done once. The clone is upstream-maintained by the spec2nii project — `git pull` to refresh.

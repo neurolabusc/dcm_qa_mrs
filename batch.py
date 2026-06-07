@@ -9,9 +9,8 @@ Two corpora:
                                 diffed against `Ref/local/<corpus>/<series>.json`.
 
   --corpus spec2nii            : walks the curated 40-dataset inventory in
-                                `dcm2niix/tools/spec2nii_compare.py` (loaded
-                                via `$DCM2NIIX_TOOLS` / `--dcm2niix-tools`).
-                                Each dataset's DICOMs live under
+                                the sibling `spec2nii_compare.py`. Each
+                                dataset's DICOMs live under
                                 `$SPEC2NII_DATA`; outputs land in
                                 `Out/spec2nii/<dataset_id>.json` and are
                                 diffed against `Ref/spec2nii/<dataset_id>.json`.
@@ -41,7 +40,6 @@ Usage:
 Environment (for --corpus spec2nii / both):
     SPEC2NII_DATA    path to spec2nii_test_data root (clone of
                      git.fmrib.ox.ac.uk/wclarke/spec2nii_test_data; ~5 GB)
-    DCM2NIIX_TOOLS   path to dcm2niix/tools/ (carries the curated inventory)
 """
 
 from __future__ import annotations
@@ -154,37 +152,23 @@ def _run_local(args, ignore: list[str]) -> int:
     return status
 
 
-def _load_spec2nii_inventory(tools_dir: Path):
-    """Import the curated DATASETS list from dcm2niix/tools/spec2nii_compare.py.
-
-    Done at runtime via `sys.path.insert` so dcm_qa_mrs doesn't depend on a
-    Python-package install of the dcm2niix tools.
-    """
-    sys.path.insert(0, str(tools_dir))
-    try:
-        import spec2nii_compare as _mod  # type: ignore
-    finally:
-        sys.path.pop(0)
-    return list(_mod.DATASETS)
-
-
 def _run_spec2nii(args, ignore: list[str]) -> int:
-    tools = args.dcm2niix_tools or os.environ.get("DCM2NIIX_TOOLS")
-    if not tools:
-        print("Error: --dcm2niix-tools or $DCM2NIIX_TOOLS must point at "
-              "dcm2niix/tools/ (where spec2nii_compare.py lives).",
-              file=sys.stderr); return 1
     if not os.environ.get("SPEC2NII_DATA"):
         print("Error: $SPEC2NII_DATA must point at a local clone of\n"
               "  https://git.fmrib.ox.ac.uk/wclarke/spec2nii_test_data\n"
               "  (~5 GB; clone once, then export the path).", file=sys.stderr)
         return 1
-    tools_dir = Path(tools).resolve()
-    if not (tools_dir / "spec2nii_compare.py").exists():
-        print(f"Error: {tools_dir}/spec2nii_compare.py not found",
-              file=sys.stderr); return 1
 
-    datasets = _load_spec2nii_inventory(tools_dir)
+    # Inventory now lives in the sibling spec2nii_compare.py (moved from
+    # dcm2niix/tools/). Import via Python's normal sibling-module mechanism;
+    # REPO is on sys.path because batch.py is executed as a script.
+    sys.path.insert(0, str(REPO))
+    try:
+        from spec2nii_compare import DATASETS  # type: ignore
+    finally:
+        sys.path.pop(0)
+    datasets = list(DATASETS)
+
     outdir = Path(args.outdir).resolve() / "spec2nii"
     refdir = Path(args.refdir).resolve() / "spec2nii"
     if not args.no_clean and outdir.exists():
@@ -235,9 +219,6 @@ def main() -> int:
     ap.add_argument("--outdir", default=str(REPO / "Out"))
     ap.add_argument("--refdir", default=str(REPO / "Ref"))
     ap.add_argument("--dcm2niix", default="dcm2niix")
-    ap.add_argument("--dcm2niix-tools",
-                    help="path to dcm2niix/tools/ (or set $DCM2NIIX_TOOLS); "
-                         "required by --corpus spec2nii/both")
     ap.add_argument("--flags", nargs="*", default=DEFAULT_DCM2NIIX_FLAGS,
                     help="dcm2niix flags (default: %(default)s). For the "
                          "spec2nii corpus, `%%f` is replaced per-dataset with "
