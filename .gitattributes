@@ -1,0 +1,9 @@
+# DICOM source files — large binary, never useful as text diffs.
+In/**/*.dcm filter=lfs diff=lfs merge=lfs -text
+In/**/*.IMA filter=lfs diff=lfs merge=lfs -text
+
+# Ref/ holds ONLY plain-text .json sidecars (per-corpus regression baselines).
+# .nii image-data parity is delegated to spec2nii live-compare in
+# compare_spec2nii.py — keeping Ref/ sidecar-only keeps the repo small,
+# diff-friendly, and out of LFS. Adding .nii here would re-introduce the
+# LFS bill without adding coverage spec2nii doesn't already provide.
