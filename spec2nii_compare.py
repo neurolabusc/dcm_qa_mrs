@@ -691,12 +691,22 @@ def compare(ds: Dataset, with_mrs_post: bool = False) -> CompareResult:
                 s, d = spec_meta[k], dcm_meta[k]
                 if s == d:
                     continue
-                # List-of-numbers: accept if every entry is within tolerance.
-                if isinstance(s, list) and isinstance(d, list) and len(s) == len(d) \
-                        and all(_floats_close(a, b) for a, b in zip(s, d)):
+                # List-of-numbers (and lists-of-lists, e.g. 4x4 VOI matrix):
+                # accept if every leaf entry is within tolerance. Recurses
+                # so a nested NxM array (BIDS-MRS VOI) gets the same 5-ULP /
+                # 1e-5-relative treatment as a flat array.
+                def _nested_close(a, b):
+                    if isinstance(a, list) and isinstance(b, list):
+                        if len(a) != len(b):
+                            return False
+                        return all(_nested_close(x, y) for x, y in zip(a, b))
+                    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                        return _floats_close(a, b)
+                    return a == b
+                if _nested_close(s, d):
                     continue
                 # Single number: tolerance check.
-                if _floats_close(s, d):
+                if isinstance(s, (int, float)) and isinstance(d, (int, float)) and _floats_close(s, d):
                     continue
                 sidecar_diff["differing"].append((k, s, d))
         elif not spec_json:
