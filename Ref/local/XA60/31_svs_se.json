@@ -73,6 +73,7 @@
 	"TransmitCoilName": "8Tx32Rx_Head_C",
 	"InversionTime": 0,
 	"WaterSuppressed": true,
+	"VOI": [[19.998515498425238, 0.14660504322309137, 0.19464028528024604, -17.399327136299998], [0.12825469890030139, -19.916286393499213, 1.8234821103620105, -0], [0.20719216070001326, -1.8220985849892044, -19.915748244857276, 46.894898318400003], [0.0, 0.0, 0.0, 1.0]],
 	"MRSpectroscopyAcquisitionType": "SINGLE_VOXEL",
 	"ImageOrientationPatientDICOM": [
 		-0.999925,
@@ -83,5 +84,5 @@
 		-0.0911049	],
 	"BidsGuess": ["mrs","_svs"],
 	"ConversionSoftware": "dcm2niix",
-	"ConversionSoftwareVersion": "v1.0.20260606"
+	"ConversionSoftwareVersion": "v1.0.20260620"
 }
