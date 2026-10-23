@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -111,7 +112,7 @@ def _compare_series(series_name: str, dcm_nii: Path, dcm_json: Path | None,
             out["notes"].append(f"pixdim[{k}] dcm={d} spec={s} (Δ={d-s:.3e})")
     if dcm_json and spec_json:
         _compare_sidecar(out, json.loads(dcm_json.read_text()),
-                         json.loads(spec_json.read_text()))
+                         json.loads(spec_json.read_text()), dcm_hdr.dim[0])
     elif not dcm_json:
         out["notes"].append("dcm2niix produced no JSON sidecar")
     elif not spec_json:
@@ -119,9 +120,12 @@ def _compare_series(series_name: str, dcm_nii: Path, dcm_json: Path | None,
     return out
 
 
-def _compare_sidecar(result: dict, dcm: dict, spec: dict) -> None:
+def _compare_sidecar(result: dict, dcm: dict, spec: dict, ndim: int = 7) -> None:
     raw_dcm = set(dcm); raw_spec = set(spec)
     dcm_keys = raw_dcm - IGNORE_FIELDS_GLOBAL
+    # spec2nii tags dim_5 (DIM_DYN) on 4D MRSI; NIfTI-MRS only requires tags for present dims
+    raw_spec = {k for k in raw_spec
+                if not (re.fullmatch(r"dim_[5-7](_info|_header)?", k) and int(k[4]) > ndim)}
     spec_keys = raw_spec - IGNORE_FIELDS_GLOBAL
     for spec_name, dcm_name in BIDS_MRS_ALIASES.items():
         if spec_name in raw_spec and dcm_name in raw_dcm:

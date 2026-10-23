@@ -1,6 +1,6 @@
 ## About
 
-This repository provides example DICOM Magnetic Resonance Spectroscopy data to illustrate conversion to the [BIDS standard](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetic-resonance-spectroscopy.html). At the moment, only Siemens XA60 DICOMs with single-voxel spectroscopy (svs) are provided. It provides a regression test for dcm2niix, but also compares conversion of the native executable dcm2niix to the [spec2nii](https://github.com/wtclarke/spec2nii) Python scripts.
+This repository provides example DICOM Magnetic Resonance Spectroscopy data to illustrate conversion to the [BIDS standard](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetic-resonance-spectroscopy.html). At the moment, only Siemens XA60 DICOMs with single-voxel spectroscopy (svs, `In/XA60`) and 2D chemical shift imaging (MRSI, `In/mrsi`) are provided. It provides a regression test for dcm2niix, but also compares conversion of the native executable dcm2niix to the [spec2nii](https://github.com/wtclarke/spec2nii) Python scripts.
 
 Note that dcm2niix and spec2nii are expected to generate **equivalent**, not **identical**, results. spec2nii embeds spectroscopy-critical details directly into the NIfTI image as a header extension. dcm2niix provides those details in a BIDS-MRS-compatible JSON sidecar. spec2nii uses the NIfTI-2 header layout; dcm2niix uses NIfTI-1. The image data (FID payload + sform + dim/pixdim) is compared byte-for-byte and float32-precise — that's the parity claim. Sidecar comparison ignores informational/provenance fields (see `compare_spec2nii.py` for the master ignore-list rationale).
 
@@ -11,11 +11,17 @@ In/                   DICOM source files (LFS-tracked .dcm/.IMA)
   XA60/
     30_svs_se/        per-series subfolder; each contains the DICOMs
     31_svs_se/        for that series
+  mrsi/               XA60 2D CSI (16x16 grid)
+    9_csi_se_30/
+    10_csi_slaser_135/
 Ref/                  per-corpus sidecar baselines (sidecar-only — no .nii)
   local/              baselines for the local corpus
     XA60/
       30_svs_se.json
       31_svs_se.json
+    mrsi/
+      9_csi_se_30.json
+      10_csi_slaser_135.json
   spec2nii/           baselines for the wider spec2nii corpus (populated
                       after a successful `batch.py --corpus spec2nii` run)
 Out/                  untracked; created/cleaned by batch.py / compare_spec2nii.py
@@ -69,7 +75,7 @@ dcm_qa_mrs has two scripts that cover different (overlapping) corpora:
 
 | Script | `--corpus` | Tests | Validates against |
 |---|---|---|---|
-| `batch.py` | `local` (default) | DICOMs in `In/` (XA60) | `Ref/local/` sidecars (regression of dcm2niix's own emission) |
+| `batch.py` | `local` (default) | DICOMs in `In/` (XA60 SVS, MRSI) | `Ref/local/` sidecars (regression of dcm2niix's own emission) |
 | `batch.py` | `spec2nii` | Wider 40-dataset reference (via `$SPEC2NII_DATA`) | `Ref/spec2nii/` sidecars |
 | `batch.py` | `both` | Both | Both |
 | `compare_spec2nii.py` | `local` (default) | DICOMs in `In/` | spec2nii run live (FID + sform + dim/pixdim + sidecar) |
