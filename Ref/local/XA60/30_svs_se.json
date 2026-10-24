@@ -28,7 +28,7 @@
 	"TablePosition": [
 		0,
 		0,
-		-0	],
+		0	],
 	"EchoTime": 0.03,
 	"RepetitionTime": 4,
 	"SpoilingState": true,
@@ -83,5 +83,5 @@
 		-0.0911049	],
 	"BidsGuess": ["mrs","_svs"],
 	"ConversionSoftware": "dcm2niix",
-	"ConversionSoftwareVersion": "v1.0.20260620"
+	"ConversionSoftwareVersion": "v1.0.20261024"
 }

@@ -29,7 +29,7 @@
 	"TablePosition": [
 		0,
 		0,
-		-0	],
+		0	],
 	"NumberOfAverages": 3,
 	"EchoTime": 0.135,
 	"RepetitionTime": 1.7,
@@ -84,5 +84,5 @@
 		-0	],
 	"BidsGuess": ["mrs","_mrsi"],
 	"ConversionSoftware": "dcm2niix",
-	"ConversionSoftwareVersion": "v1.0.20261021"
+	"ConversionSoftwareVersion": "v1.0.20261024"
 }
